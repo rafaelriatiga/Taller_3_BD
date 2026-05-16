@@ -1,0 +1,9 @@
+# Bloquear el archivo con mis contraseñas 
+.env
+
+# Bloquear la carpeta pesada del entorno virtual
+venv/
+
+# Bloquear carpetas innecesarias de Python
+__pycache__/
+*.pyc
