@@ -3,7 +3,9 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, String, Text, Date
 from sqlalchemy.orm import declarative_base
 from faker import Faker
+from sqlalchemy import insert
 import sys
+
 
 # Cargar las variables ocultas del archivo .env
 load_dotenv()
@@ -70,10 +72,48 @@ def generar_datos_lote(cantidad=100000):
 
 # Función principal para ejecutar el proceso completo
 def main():
+    global engine  
     try:
-        print("Modelo ORM definido y funcion generadora de Faker lista.")
+        # 1. Conectarse al servidor para asegurar que la base de datos exista
+        with engine.connect() as conexion_servidor:
+            # Ejecutamos SQL crudo para crear la base de datos si no existe
+            from sqlalchemy import text
+            conexion_servidor.execute(text(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}"))
+        print(f"¡Base de datos '{DB_NAME}' verificada/creada con éxito!")
+        
+        # 2. Re-apuntar el motor (engine) a la base de datos específica ya creada
+        engine = create_engine(DATABASE_URL)
+        
+        # 3. Crear la tabla si no existe dentro de esa base de datos
+        Base.metadata.create_all(engine)
+        print("¡Tabla 'personas_rafael' verificada/creada con éxito!")
+        
+        # 4. Generar los 100.000 registros en memoria
+        lista_de_personas = generar_datos_lote(cantidad=100000)
+        
+        # 5. Configurar el tamaño del lote (Chunks) para la inserción masiva
+        tamano_lote = 5000
+        total_registros = len(lista_de_personas)
+        print(f"Iniciando inserción masiva en bloques de {tamano_lote}...")
+        
+        # 6. Abrimos la transacción segura para inyectar los datos
+        with engine.begin() as conexion:
+            for i in range(0, total_registros, tamano_lote):
+                # Cortamos un pedazo de la lista
+                lote_actual = lista_de_personas[i:i + tamano_lote]
+                
+                # Usamos RegistroFalso.__table__ en vez de la clase directa 
+                conexion.execute(
+                    insert(RegistroFalso.__table__),
+                    lote_actual
+                )
+                print(f"Progreso: {i + len(lote_actual)} / {total_registros} registros insertados.")
+                
+        print("¡Proceso finalizado con éxito! Los 100.000 registros están en MySQL.")
+
     except Exception as e:
         print(f"\n[ERROR CRÍTICO]: El proceso se detuvo debido a: {e}", file=sys.stderr)
+        print("Se ha aplicado un ROLLBACK automático. La base de datos no sufrió modificaciones estructurales dañadas.")
 
 #Ejecutar la función principal si este script es el programa principal
 if __name__ == "__main__":
